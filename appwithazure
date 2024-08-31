@@ -1,0 +1,50 @@
+from flask import Flask, render_template, request, jsonify
+import os
+from openai import AzureOpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+
+app = Flask(__name__)
+
+# A function to generate a response from the chatbot
+def generate_response(user_input):
+
+    client = AzureOpenAI(
+        api_key="65c53ebc291b44c8bf4181c77ecf6d6b",
+        api_version="2024-05-01-preview",
+        azure_endpoint="https://finwizards-test.openai.azure.com/"
+        #azure_ad_token_provider=token_provider
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-35-turbo",
+        messages= [
+        {
+        "role": "user",
+        "content": user_input
+        }],
+        max_tokens=800,
+        temperature=0.7,
+        top_p=0.95,
+        frequency_penalty=0,
+        presence_penalty=0,
+        stop=None,
+        stream=False
+    )
+
+    print(response.to_json())
+
+    return response.choices[0].message.content.strip()
+    #return f"You said: {user_input}"
+
+@app.route('/')
+def index():
+    return render_template('chat.html')
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    user_input = request.form['message']
+    response = generate_response(user_input)
+    return jsonify({'response': response})
+
+if __name__ == '__main__':
+    app.run(debug=True)
