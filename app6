@@ -1,0 +1,51 @@
+from flask import Flask, render_template, request, redirect, url_for
+from bs4 import BeautifulSoup
+import requests
+import os
+
+app = Flask(__name__)
+
+# Define the folder to save text files
+SAVE_FOLDER = 'saved_texts'
+if not os.path.exists(SAVE_FOLDER):
+    os.makedirs(SAVE_FOLDER)
+
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    if request.method == 'POST':
+        url = request.form['url']
+        try:
+            # Fetch the webpage
+            response = requests.get(url)
+            response.raise_for_status()
+
+            # Parse the HTML content
+            soup = BeautifulSoup(response.content, 'html.parser')
+
+            # Extract text from HTML
+            text = soup.get_text(separator='\n', strip=True)
+
+            # Define a filename
+            filename = url.split('//')[-1].replace('/', '_') + '.txt'
+            filepath = os.path.join(SAVE_FOLDER, filename)
+
+            # Save the text to a file
+            with open(filepath, 'w', encoding='utf-8') as file:
+                file.write(text)
+
+            return redirect(url_for('index', filename=filename))
+
+        except Exception as e:
+            return f"An error occurred: {e}"
+
+    return render_template('index.html')
+
+
+@app.route('/file/<filename>')
+def download_file(filename):
+    return send_from_directory(SAVE_FOLDER, filename)
+
+
+if __name__ == '__main__':
+    app.run(debug=True)
