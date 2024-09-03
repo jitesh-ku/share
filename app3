@@ -1,0 +1,28 @@
+from flask import Flask, render_template, request, jsonify
+
+app = Flask(__name__)
+
+# Welcome page route
+@app.route('/')
+def welcome():
+    return render_template('welcome.html')
+
+# Chat page route
+@app.route('/chat')
+def chat():
+    return render_template('chat.html')
+
+# API endpoint for chatbot interaction
+@app.route('/get_response', methods=['POST'])
+def get_response():
+    user_message = request.form['message']
+    # Here, you would have your chatbot logic
+    bot_response = respond_to_user(user_message)
+    return jsonify({'response': bot_response})
+
+def respond_to_user(user_message):
+    # Placeholder for chatbot logic
+    return "This is a response to: " + user_message
+
+if __name__ == '__main__':
+    app.run(debug=True)
