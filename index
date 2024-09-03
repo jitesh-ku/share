@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URL to Text File</title>
+</head>
+<body>
+    <h1>Convert URL to Text File</h1>
+    <form action="/" method="post">
+        <label for="url">Enter URL:</label>
+        <input type="text" id="url" name="url" required>
+        <button type="submit">Submit</button>
+    </form>
+
+    {% if filename %}
+    <p>Your file has been saved! <a href="{{ url_for('download_file', filename=filename) }}">Download it here</a></p>
+    {% endif %}
+</body>
+</html>
