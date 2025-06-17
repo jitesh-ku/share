@@ -1,0 +1,72 @@
+#pip install atlassian-python-api weasyprint
+#python confluence_to_pdf.py https://your-domain.atlassian.net/wiki/spaces/XYZ/pages/123456789/Page+Title
+
+from atlassian import Confluence
+from weasyprint import HTML
+import os
+import sys
+import re
+
+# -------------------------
+# 🔧 CONFIGURATION
+# -------------------------
+CONFLUENCE_BASE_URL = 'https://your-domain.atlassian.net/wiki'
+CONFLUENCE_USERNAME = 'your-email@example.com'
+CONFLUENCE_API_TOKEN = 'your-api-token'
+OUTPUT_DIR = 'confluence_pdfs'
+
+# -------------------------
+# 🔁 RECURSIVE FETCH
+# -------------------------
+def sanitize_filename(title):
+    return re.sub(r'[\\/*?:"<>|]', "", title)
+
+def get_page_id_from_url(url):
+    match = re.search(r'/pages/(\d+)', url)
+    return match.group(1) if match else None
+
+def fetch_page_and_subpages(confluence, page_id, parent_title=""):
+    page = confluence.get_page_by_id(page_id, expand='body.storage,version')
+    title = page['title']
+    content = page['body']['storage']['value']
+    full_title = f"{parent_title} - {title}" if parent_title else title
+    file_name = sanitize_filename(full_title) + ".pdf"
+    
+    print(f"📄 Saving: {full_title}")
+    HTML(string=content, base_url=CONFLUENCE_BASE_URL).write_pdf(os.path.join(OUTPUT_DIR, file_name))
+
+    # Recursively fetch children
+    children = confluence.get_child_pages(page_id)
+    for child in children:
+        fetch_page_and_subpages(confluence, child['id'], full_title)
+
+# -------------------------
+# 🏁 MAIN FUNCTION
+# -------------------------
+def main(confluence_url):
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+
+    page_id = get_page_id_from_url(confluence_url)
+    if not page_id:
+        print("❌ Invalid Confluence URL format. Must contain '/pages/<id>'")
+        return
+
+    confluence = Confluence(
+        url=CONFLUENCE_BASE_URL,
+        username=CONFLUENCE_USERNAME,
+        password=CONFLUENCE_API_TOKEN
+    )
+
+    fetch_page_and_subpages(confluence, page_id)
+
+# -------------------------
+# 🚀 ENTRY POINT
+# -------------------------
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python confluence_to_pdf.py <confluence_page_url>")
+        sys.exit(1)
+    
+    confluence_url = sys.argv[1]
+    main(confluence_url)
