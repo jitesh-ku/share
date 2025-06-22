@@ -1,0 +1,84 @@
+import streamlit as st
+import feedparser
+from newspaper import Article
+import openai
+
+openai.api_key = ""
+
+rss_feeds = {
+    "MIT Technology": "https://www.technologyreview.com/topic/artificial-intelligence/feed/",
+    "The Verge": "https://www.theverge.com/rss/index.xml",
+    "Futurism" : "https://futurism.com/categories/ai-artificial-intelligence/feed/",
+    "CNET News": "https://www.cnet.com/rss/news/",
+    "Google News": "https://news.google.com/rss/search?q=technology",
+    "TechCrunch": "https://techcrunch.com/feed/"
+}
+
+# Function to fetch article content from URL
+def get_article_text(article_url):
+    try:
+        # Fetch full content
+        article = Article(article_url)
+        article.download()
+        article.parse()
+        content = article.text[:500]  # preview first 500 chars
+        #content = article.text
+        #print(f"Content Preview:\n{content}...\n")
+        return content
+    except Exception as e:
+        return f"Failed to fetch full article: {e}"
+
+# Function to get AI summary
+def get_ai_summary(text):
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",  # or gpt-4 if you have access
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that summarizes news articles."},
+                {"role": "user", "content": f"Summarize this article:\n\n{text}"}
+            ],
+            temperature=0.7,
+            max_tokens=300
+        )
+        return response['choices'][0]['message']['content']
+    except Exception as e:
+        return f"AI Error: {e}"
+
+# Set page title
+st.set_page_config(page_title="Tech News Aggregator", layout="wide")
+st.title("Combined Technology News Feed")
+
+
+st.sidebar.markdown("")
+st.sidebar.markdown("")
+st.sidebar.title("Select News Sources")
+
+# Use one-column layout
+selected_sources = []
+for source in rss_feeds.keys():
+    if st.sidebar.checkbox(source, value=True, key=source):
+        selected_sources.append(source)
+
+
+# Display news from selected feeds
+if selected_sources:
+    for source in selected_sources:
+        st.header(f"{source}")
+        feed = feedparser.parse(rss_feeds[source])
+
+        for entry in feed.entries[:5]:  # Top 5 articles from each source
+            st.subheader(entry.title)
+            st.write(f"{entry.get('published', 'No date')}")
+            st.markdown(f"[Read Full Article]({entry.link})", unsafe_allow_html=True)
+
+            # Unique key per button
+            if st.button(f"View AI Generated Summary", key=entry.link):
+                with st.spinner("Generating summary..."):
+                    article_text = get_article_text(entry.link)
+                    #summary = get_ai_summary(article_text)
+                    summary = "AI Generated Summary Dummy for " + entry.title
+                    #st.success("Summary:")
+                    st.write(article_text)
+            st.write("---")
+else:
+    st.warning("Please select at least one news source to display articles.")
