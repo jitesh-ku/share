@@ -1,0 +1,149 @@
+# Full AI-Powered SEO Blog Writer with Streamlit UI, WordPress Publishing, and Multilingual Support
+
+import os
+#from openai import OpenAI
+import requests
+from bs4 import BeautifulSoup
+import textstat
+import streamlit as st
+from googletrans import Translator
+
+# Environment setup
+#openai.api_key = os.getenv("OPENAI_API_KEY")
+translator = Translator()
+#client = OpenAI(
+#    api_key=""
+#)
+
+
+# Function to fetch related keywords from DuckDuckGo
+def fetch_related_keywords(scan_topic):
+    url = f"https://duckduckgo.com/html/?q={scan_topic}"
+    response = requests.get(url)
+    print(response.text)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    results = [a.get_text() for a in soup.select(".result__a")]
+    print(results)
+    fetched_keywords = list(set([line.split(" - ")[0] for line in results if scan_topic.lower() not in line.lower()]))
+    print(fetched_keywords)
+    return fetched_keywords[:5] if fetched_keywords else [scan_topic]
+
+
+# Function to generate blog post using OpenAI
+'''
+def generate_blog_post(scan_topic, fetched_keywords, seo_metrics, language="en"):
+    prompt = f"""
+    Write a well-structured, SEO-optimized blog post on the topic: '{scan_topic}".
+
+    Include:
+    - Begin with an engaging introduction that hooks the reader
+    - Include 2 to 3 informative and well-formatted subheadings (H2 or H3 style)
+    - Include these keywords: {', '.join(fetched_keywords)}
+    - Naturally incorporate the keyword and related terms for better SEO
+    - Embed at least two link related to topic as reference links like {{AFF_LINK_1}}, {{AFF_LINK_2}}
+    - Write in a conversational, helpful tone to appeal to both users and search engines
+
+    Use these keyword metrics to guide optimization:
+    - Search Volume: {seo_metrics['search_volume']}
+    - Keyword Difficulty: {seo_metrics['keyword_difficulty']}
+    - Average CPC: {seo_metrics['avg_cpc']}
+
+    Target length: ~1000 words
+    Do not include a summary or meta-commentary about the post's SEO optimization or tone at the end. Conclude naturally, without reflective statements about the writing itself.
+    """
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a helpful SEO blog post writer."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature = 0.7
+    )
+
+    content = response['choices'][0]['message']['content']
+
+    if language != "en":
+        translation = translator.translate(content, dest=language)
+        content = translation.text
+
+    return content
+'''
+
+# Function to analyze SEO factors
+def analyze_seo_factors(content):
+    score = textstat.flesch_reading_ease(content)
+    word_count = len(content.split())
+    return {"readability_score": score, "word_count": word_count}
+
+
+# Function to export blog to markdown
+def export_to_markdown(title, content, fetched_keywords):
+    safe_title = title.lower().replace(" ", "_").replace("/", "_")
+    export_filename = f"{safe_title}.md"
+    with open(export_filename, "w", encoding="utf-8") as file:
+        file.write(f"# {title}\n\n")
+        file.write(f"**Keywords**: {', '.join(fetched_keywords)}\n\n")
+        file.write(content)
+    return export_filename
+
+
+# Streamlit UI
+st.title("AI-Powered SEO Blog Writer")
+
+with st.form("blog_form"):
+    topic = st.text_input("Enter Blog Topic")
+    language = st.selectbox("Language", ["en", "hi", "es", "fr", "de", "ta", "bn", "ml", "mr"])
+    seo_metrics = {
+        "search_volume": 10000,
+        "keyword_difficulty": 0.4,
+        "avg_cpc": 1.2
+    }
+
+    submitted = st.form_submit_button("Generate Blog")
+
+    if submitted:
+        st.info("Fetching related keywords...")
+        keywords = fetch_related_keywords(topic)
+        print(keywords)
+        st.success(f"Keywords: {keywords}")
+
+        st.info("Generating blog post...")
+        #blog_content = generate_blog_post(topic, keywords, seo_metrics, language)
+        blog_content = "This is dummy blog on " + topic
+
+        st.info("Analyzing SEO...")
+        seo = analyze_seo_factors(blog_content)
+        st.write(f"**Readability Score**: {seo['readability_score']:.2f}")
+        st.write(f"**Word Count**: {seo['word_count']}")
+
+        st.info("Saving blog post...")
+        filename = export_to_markdown(topic, blog_content, keywords)
+        st.success(f"Markdown saved as {filename}")
+
+        html_filename = filename.replace(".md", ".html")
+        with open(html_filename, "w", encoding="utf-8") as f:
+            f.write(
+                f"<h1>{topic}</h1><p><b>Keywords:</b> {', '.join(keywords)}</p><p>{blog_content.replace('\\n', '<br>')}</p>")
+
+if submitted and os.path.exists(filename):
+    with open(filename, "rb") as f:
+        st.download_button(
+            label="Download Markdown",
+            data=f,
+            file_name=filename,
+            mime="text/markdown"
+        )
+
+
+    with open(filename, "rb") as f:
+        st.download_button(
+            label="Download as HTML",
+            data=f,
+            file_name=html_filename,
+            mime="text/html"
+        )
+
+    st.markdown("###Blog Preview")
+    st.markdown(blog_content)
+    st.components.v1.html(open(html_filename, "r", encoding="utf-8").read(), height=600, scrolling=True)
