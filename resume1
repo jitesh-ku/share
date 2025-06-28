@@ -1,0 +1,200 @@
+# AI-Powered Resume Analyzer + Job Matcher (Hybrid Scoring with Skill Extraction)
+
+import os
+import docx2txt
+import PyPDF2
+import streamlit as st
+import pandas as pd
+from sentence_transformers import SentenceTransformer, util
+from sklearn.metrics.pairwise import cosine_similarity
+import openai
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+from io import BytesIO
+import base64
+from keybert import KeyBERT
+from fpdf import FPDF
+import re
+
+# Load models
+model = SentenceTransformer('all-MiniLM-L6-v2')
+kw_model = KeyBERT(model)
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+COMMON_SKILLS = {
+    "python", "java", "c++", "c", "javascript", "typescript", "html", "css",
+    "sql", "mysql", "postgresql", "mongodb", "oracle", "db2", "firebase",
+    "django", "flask", "spring", "hibernate", "nodejs", "react", "angular", "vuejs",
+    "git", "github", "bitbucket", "docker", "kubernetes", "jenkins",
+    "linux", "windows", "bash", "powershell",
+    "aws", "azure", "gcp", "terraform", "ansible", "lambda",
+    "rest api", "graphql", "soap", "postman", "swagger",
+    "tensorflow", "pytorch", "sklearn", "pandas", "numpy", "matplotlib",
+    "nlp", "llm", "openai", "bert", "gpt", "machine learning", "data science",
+    "hadoop", "spark", "airflow", "kafka", "snowflake", "bigquery",
+    "agile", "scrum", "jira", "confluence",
+    "power bi", "tableau", "looker", "excel", "vba",
+    "cobol", "mainframe", "db2", "jcl"
+}
+
+def read_pdf(file):
+    pdf_reader = PyPDF2.PdfReader(file)
+    text = ""
+    for page in pdf_reader.pages:
+        text += page.extract_text() + "\n"
+    return text
+
+def read_docx(file):
+    return docx2txt.process(file)
+
+def extract_text(file):
+    if file.name.endswith('.pdf'):
+        return read_pdf(file)
+    elif file.name.endswith('.docx'):
+        return read_docx(file)
+    elif file.name.endswith('.txt'):
+        return file.read().decode("utf-8")
+    else:
+        return ""
+
+def get_embedding(text):
+    return model.encode(text, convert_to_tensor=True)
+
+def extract_skills(text):
+    text = text.lower()
+    tokens = re.findall(r'\b\w[\w+.#/:-]*\b', text)
+    extracted = set()
+
+    # Match tokens against COMMON_SKILLS
+    for skill in COMMON_SKILLS:
+        for token in tokens:
+            if skill in token:
+                extracted.add(skill)
+                break
+
+    return list(extracted)
+
+def skill_overlap_score(resume_skills, jd_skills):
+    matched = set(resume_skills).intersection(set(jd_skills))
+    return len(matched) / max(len(jd_skills), 1)
+
+def generate_wordcloud(text):
+    wc = WordCloud(width=500, height=50, background_color='white').generate(text)
+    buf = BytesIO()
+    wc.to_image().save(buf, format='PNG')
+    byte_im = buf.getvalue()
+    return base64.b64encode(byte_im).decode('utf-8')
+
+def get_resume_feedback(text):
+    prompt = f"""
+    Analyze the following resume and provide suggestions to improve it. Focus on formatting, skills, clarity, and alignment with software/tech job roles:
+
+    {text[:3000]}
+    """
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Error: {e}"
+
+def match_resumes_to_jobs(resume_texts, job_texts):
+    results = []
+    resume_embeddings = [get_embedding(text) for text in resume_texts]
+    job_embeddings = [get_embedding(text) for text in job_texts]
+    resume_skills_list = [extract_skills(text) for text in resume_texts]
+    job_skills_list = [extract_skills(text) for text in job_texts]
+
+    for i, (r_text, r_emb, r_skills) in enumerate(zip(resume_texts, resume_embeddings, resume_skills_list)):
+        scores = []
+        for j, (j_text, j_emb, j_skills) in enumerate(zip(job_texts, job_embeddings, job_skills_list)):
+            semantic_score = util.cos_sim(r_emb, j_emb).item()
+            skill_score = skill_overlap_score(r_skills, j_skills)
+            combined_score = 0.5 * semantic_score + 0.5 * skill_score
+            scores.append((f"JD_{j+1}", combined_score, semantic_score, skill_score))
+        results.append((f"Resume_{i+1}", scores, r_skills))
+    return results
+
+def export_pdf(resume_id, match_data, skills, feedback):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 10, f"Match Report: {resume_id}", ln=True)
+
+    pdf.set_font("Arial", '', 12)
+    pdf.cell(0, 10, "\nBest Matches:", ln=True)
+    for jd, combined, sem, skill in match_data:
+        pdf.cell(0, 10, f"- {jd}: Final Score={combined:.2f}, Semantic={sem:.2f}, Skills={skill:.2f}", ln=True)
+
+    pdf.cell(0, 10, "\nExtracted Skills:", ln=True)
+    pdf.set_font("Arial", 'I', 12)
+    pdf.multi_cell(0, 10, ', '.join(skills))
+
+    pdf.set_font("Arial", '', 12)
+    pdf.cell(0, 10, "\nGPT Feedback:", ln=True)
+    pdf.set_font("Arial", '', 11)
+    pdf.multi_cell(0, 10, feedback)
+
+    output_path = f"match_report_{resume_id}.pdf"
+    pdf.output(output_path)
+    return output_path
+
+# Streamlit UI
+st.set_page_config(page_title="AI Resume Matcher", layout="wide")
+
+st.markdown("""
+    <div style="text-align:center">
+        <img src="https://img.icons8.com/fluency/96/resume.png" width="60"/>
+        <h1 style="display:inline-block"> AI-Powered Resume Analyzer + Job Matcher </h1>
+        <p style="color:gray">Hybrid Scoring + Skill Insights + GPT Feedback + PDF Reports</p>
+    </div>
+""", unsafe_allow_html=True)
+
+st.sidebar.header("📄 Upload Resumes")
+resume_files = st.sidebar.file_uploader("Upload Resumes (.pdf/.docx/.txt)", type=['pdf', 'docx', 'txt'], accept_multiple_files=True)
+
+st.sidebar.header("🧾 Upload Job Descriptions")
+job_files = st.sidebar.file_uploader("Upload Job Descriptions", type=['pdf', 'docx', 'txt'], accept_multiple_files=True)
+
+if st.sidebar.button("🔍 Analyze Matches"):
+    resume_texts = [extract_text(file) for file in resume_files]
+    job_texts = [extract_text(file) for file in job_files]
+
+    with st.spinner("Analyzing resumes and matching with jobs..."):
+        match_results = match_resumes_to_jobs(resume_texts, job_texts)
+
+    st.subheader("📊 Match Results")
+    for idx, (resume_id, matches, resume_skills) in enumerate(match_results):
+        resume_text = resume_texts[idx]
+        st.markdown(f"### 🧑‍💻 {resume_id}")
+        df = pd.DataFrame(matches, columns=["Job Description", "Final Score", "Semantic Score", "Skill Match"])
+        st.dataframe(df.sort_values(by="Final Score", ascending=False))
+
+        best_match = max(matches, key=lambda x: x[1])
+        st.success(f"Best match: {best_match[0]} with Final Score: {best_match[1]:.2f}")
+
+        # Skills
+        st.markdown("**🔧 Extracted Resume Skills:**")
+        if resume_skills:
+            skill_list = " * ".join(skill.capitalize() for skill in resume_skills)
+            st.write(skill_list)
+            # Word Cloud
+            st.markdown("**☁️ Resume Word Cloud:**")
+            wordcloud_img = generate_wordcloud(skill_list)
+            st.image(f"data:image/png;base64,{wordcloud_img}", use_container_width=True)
+        else:
+            st.write("No relevant technical skills found.")
+
+        # GPT-Based Feedback
+        st.markdown("**💡 Resume Improvement Suggestions (via OpenAI GPT):**")
+        #feedback = get_resume_feedback(resume_text)
+        feedback = "LOOKS GOOD"
+        st.markdown(f"<div style='background:#f4f4f4;padding:10px;border-radius:8px'>{feedback}</div>", unsafe_allow_html=True)
+
+        # Export to PDF
+        st.markdown("**📥 Download PDF Match Report:**")
+        pdf_path = export_pdf(resume_id, matches[:3], resume_skills, feedback)
+        with open(pdf_path, "rb") as f:
+            st.download_button(label="Download Match Report", data=f, file_name=os.path.basename(pdf_path), mime="application/pdf")
