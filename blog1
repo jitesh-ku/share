@@ -1,0 +1,217 @@
+# Full AI-Powered SEO Blog Writer with Streamlit UI, WordPress Publishing, and Multilingual Support
+
+import os
+#from openai import OpenAI
+import requests
+from bs4 import BeautifulSoup
+import textstat
+import streamlit as st
+#from googletrans import Translator
+from gtts import gTTS
+import base64
+import pathlib
+import webbrowser
+from googletrans import Translator
+#from translatepy import Translator
+
+translator = Translator()
+
+# Environment setup
+#openai.api_key = os.getenv("OPENAI_API_KEY")
+#translator = Translator()
+#client = OpenAI(
+#    api_key=""
+#)
+
+
+# Function to fetch related keywords from DuckDuckGo
+def fetch_related_keywords(scan_topic):
+    url = f"https://duckduckgo.com/html/?q={scan_topic}"
+    response = requests.get(url)
+    #print(response.text)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    results = [a.get_text() for a in soup.select(".result__a")]
+    #print(results)
+    fetched_keywords = list(set([line.split(" - ")[0] for line in results if scan_topic.lower() not in line.lower()]))
+    #print(fetched_keywords)
+    return fetched_keywords[:5] if fetched_keywords else [scan_topic]
+
+
+# Function to analyze SEO factors
+def analyze_seo_factors(content):
+    score = textstat.flesch_reading_ease(content)
+    word_count = len(content.split())
+    return {"readability_score": score, "word_count": word_count}
+
+
+# Function to export blog to markdown
+def export_to_markdown(title, content, fetched_keywords):
+    safe_title = title.lower().replace(" ", "_").replace("/", "_")
+    export_filename = f"{safe_title}.md"
+    with open(export_filename, "w", encoding="utf-8") as file:
+        file.write(f"# {title}\n\n")
+        file.write(f"**Keywords**: {', '.join(fetched_keywords)}\n\n")
+        file.write(content)
+    return export_filename
+
+def speak_blog(blog_text, lang="en"):
+    if blog_text == '':
+        st.warning("No blog content available to speak.")
+        return
+    try:
+        print("Inside speak")
+        print(blog_text)
+        print(lang)
+        tts = gTTS(text=blog_text, lang=lang)
+        audio_file = "blog.mp3"
+        tts.save(audio_file)
+        st.audio(audio_file, format="audio/mp3")
+    except Exception as e:
+        st.error(f"Error generating speech: {e}")
+
+def speak_blog_trans(blog_text, lang="en"):
+    if blog_text == '':
+        st.warning("No blog content available to speak.")
+        return
+    try:
+        print("Inside speak")
+        print(blog_text)
+        print(lang)
+        tts = gTTS(text=blog_text, lang=lang)
+        audio_file = "blog.mp3"
+        tts.save(audio_file)
+        st.audio(audio_file, format="audio/mp3")
+    except Exception as e:
+        st.error(f"Error generating speech: {e}")
+
+def get_file_download_link(file_path, link_text, mime_type="text/html"):
+    with open(file_path, "rb") as f:
+        data = f.read()
+    b64 = base64.b64encode(data).decode()
+    href = f'<a href="data:{mime_type};base64,{b64}" download="{file_path}" target="_blank">{link_text}</a>'
+    return href
+
+# Save blog HTML to a local "static" folder
+def export_to_static_html(title, blog_content, keywords):
+    safe_title = title.lower().replace(" ", "_").replace("/", "_")
+    html_filename = f"{safe_title}.html"
+    static_dir = "static"
+    os.makedirs(static_dir, exist_ok=True)
+
+    html_path = os.path.join(static_dir, html_filename)
+    with open(html_path, "w", encoding="utf-8") as f:
+        html_body = f"<h1>{title}</h1><p><b>Keywords:</b> {', '.join(keywords)}</p><p>{blog_content.replace('\\n', '<br>')}</p>"
+        f.write(html_body)
+    print(html_path)
+    print(html_filename)
+    return html_path, html_filename
+
+# Streamlit UI
+st.title("AI-Powered SEO Blog Writer")
+
+with st.form("blog_form"):
+    topic = st.text_input("Enter Blog Topic")
+    language = st.selectbox("Language", ["en", "hi", "es", "fr", "de", "ta", "bn", "ml", "mr"])
+    seo_metrics = {
+        "search_volume": 10000,
+        "keyword_difficulty": 0.4,
+        "avg_cpc": 1.2
+    }
+
+    submitted = st.form_submit_button("Generate Blog")
+
+    if submitted:
+        st.info("Fetching related keywords...")
+        keywords = fetch_related_keywords(topic)
+        #st.success(f"Keywords: {keywords}")
+
+        #st.info("Generating blog post...")
+        #blog_content = generate_blog_post(topic, keywords, seo_metrics, language)
+        blog_content = "Modernizing COBOL-based mainframe systems is a critical first step—but it’s only half the journey. Refactoring legacy code and preserving business logic can liberate you from the constraints of the mainframe, but the true return on investment (ROI) emerges when those systems are transformed into modern, cloud-native digital products: elastic, observable, continuously deployable, and cost-optimized."
+
+
+
+
+        #st.info("Analyzing SEO...")
+        seo = analyze_seo_factors(blog_content)
+
+        #st.info("Saving blog post...")
+        filename = export_to_markdown(topic, blog_content, keywords)
+
+        # Save to session state
+        st.session_state.blog_content = blog_content
+        st.session_state.language = language
+        st.session_state.keywords = keywords
+        st.session_state.seo = seo
+        st.session_state.filename = filename
+
+
+        #html_filename = filename.replace(".md", ".html")
+        #with open(html_filename, "w", encoding="utf-8") as f:
+        #    html_body = f"<h1>{topic}</h1><p><b>Keywords:</b> {', '.join(keywords)}</p><p>{blog_content.replace('\\n', '<br>')}</p>"
+        #    f.write(html_body)
+
+        html_path, html_filename = export_to_static_html(topic, blog_content, keywords)
+        st.session_state.html_filename = html_filename
+        st.session_state.html_path = html_path
+
+if "blog_content" in st.session_state:
+
+    st.markdown("## ✍️ Generated Blog")
+    st.markdown(f"**Topic:** {topic}")
+    st.markdown(st.session_state.blog_content)
+
+    st.markdown("### 📊 SEO Analysis")
+    st.write(f"**Keywords:** {', '.join(st.session_state.keywords)}")
+    st.write(f"**Readability Score:** {st.session_state.seo['readability_score']:.2f}")
+    st.write(f"**Word Count:** {st.session_state.seo['word_count']}")
+
+    # Download buttons
+    with open(st.session_state.filename, "rb") as f_md:
+        st.download_button("⬇️ Download Markdown", f_md, file_name=st.session_state.filename, mime="text/markdown")
+
+    with open(st.session_state.html_filename, "rb") as f_html:
+        st.download_button("⬇️ Download HTML", f_html, file_name=st.session_state.html_filename, mime="text/html")
+
+    #html_path, html_filename = export_to_static_html(topic, st.session_state.blog_content, st.session_state.keywords)
+    #st.session_state["html_filename"] = html_filename
+
+    if "html_filename" in st.session_state:
+        static_url = pathlib.Path(st.session_state.html_filename).absolute().as_uri()
+        if st.button("🖥️ Open Blog in New Tab"):
+            webbrowser.open_new_tab(static_url)
+        #st.markdown(f'<a href="{static_url}" target="_blank">🖥️ Open Blog in New Tab</a>', unsafe_allow_html=True)
+
+    # Voice button
+    if st.button("🔊 Listen to Blog"):
+        st.session_state.play_audio = True
+
+    if st.session_state.get("play_audio"):
+        speak_blog(st.session_state.blog_content, st.session_state.language)
+        st.session_state.play_audio = False
+
+    # GoogleVoice button
+    if st.button("🔊 Listen to Blog in Hindi"):
+        st.session_state.play_audio_G = True
+
+    if st.session_state.get("play_audio_G"):
+        translated_hi = translator.translate(st.session_state.blog_content, st.session_state.language).text
+        speak_blog_trans(translated_hi, st.session_state.language)
+        st.session_state.play_audio_G = False
+
+
+    # transformers button
+    #if st.button("🔊 Listen to Blog in Hindi via translate"):
+    #    st.session_state.play_audio_P = True
+
+    #if st.session_state.get("play_audio_P"):
+    #    result = translator.translate(st.session_state.blog_content, "Hindi")
+    #    print("HindiNew:", result.result)
+    #    speak_blog(result.result, 'hi')
+    #    st.session_state.play_audio_P = False
+
+
+    #st.markdown("###Blog Preview")
+    #st.markdown(blog_content)
+    #st.components.v1.html(open(html_filename, "r", encoding="utf-8").read(), height=600, scrolling=True)
+    #with st.spinner("Generating voice..."):
