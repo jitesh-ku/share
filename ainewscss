@@ -1,0 +1,47 @@
+body {
+  font-family: Cambria, Verdana, 'Segoe UI', Tahoma, Geneva, sans-serif;
+  background-color: #dba2b0;
+}
+
+.sidebar {
+  background-color: #6b2032; /* 996c11 #e6e4d8; f1f3f5 1e1e2f*/
+  color: #eceff1; /* #916e91; 343a40 ffffff*/
+  height: 100vh;
+  position: fixed;
+  left: 0;
+  overflow-y: auto;
+/*  border-right: 1px solid #444; */
+}
+
+.sidebar .form-check {
+  margin-left: 10px;
+}
+
+.sidebar .form-check-label {
+  color: #deccd0;
+}
+
+.content {
+  margin-left: 16.6%;
+  background-color: #dba2b0; /* dbb465 2e2e3e */
+  color: #6b2032; /* 212121 f1f1f1 */
+}
+
+.card-title {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.btn-sm {
+  color: #2c3e50;
+}
+
+.card-body {
+  background-color: #ede4e6;
+}
+
+.alert-info {
+  background-color: #e8f4fd;
+  color: #0c5460;
+  border-color: #bee5eb;
+}
