@@ -1,0 +1,22 @@
+<div id="summary-section">
+  <h3>AI Summary</h3>
+  <p id="summary-text">{{ summary }}</p>
+
+  <!-- Listen Button -->
+  <button onclick="speakSummary()" id="listen-button">🔊 Listen</button>
+</div>
+
+<script>
+  function speakSummary() {
+    const summaryText = document.getElementById('summary-text').innerText;
+
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(summaryText);
+      utterance.lang = 'en-US';
+      speechSynthesis.cancel(); // Stop any previous speech
+      speechSynthesis.speak(utterance);
+    } else {
+      alert("Sorry, your browser doesn't support text-to-speech.");
+    }
+  }
+</script>
