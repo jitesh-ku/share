@@ -1,0 +1,79 @@
+from confluent_kafka import Consumer, TopicPartition
+import time
+
+# Kafka config (adjust to your environment)
+conf = {
+    'bootstrap.servers': '<BROKER:PORT>',
+    'security.protocol': 'SASL_SSL',
+    'sasl.mechanisms': 'PLAIN',      # adjust if using SCRAM, GSSAPI etc.
+    'sasl.username': '<USERNAME>',
+    'sasl.password': '<PASSWORD>',
+    'enable.auto.commit': False
+    # No group.id → avoids disturbing offsets of main app
+}
+
+consumer = Consumer(conf)
+topic = "<YOUR_TOPIC>"
+
+# Step 1: Get partitions
+md = consumer.list_topics(topic, timeout=10)
+partitions = [p.id for p in md.topics[topic].partitions.values()]
+
+# Step 2: Calculate 24h timestamp
+now_ms = int(time.time() * 1000)
+start_time = now_ms - (24 * 60 * 60 * 1000)
+
+# Step 3: Find starting offsets (24h ago)
+tp_timestamps = [TopicPartition(topic, p, start_time) for p in partitions]
+offsets = consumer.offsets_for_times(tp_timestamps, timeout=10)
+
+# Step 4: Also record the "high watermark" (end offset at start time)
+end_offsets = {}
+for p in partitions:
+    low, high = consumer.get_watermark_offsets(TopicPartition(topic, p))
+    end_offsets[p] = high  # don’t consume beyond this
+
+# Step 5: Assign starting offsets
+tps = []
+for tp in offsets:
+    if tp.offset != -1:
+        tps.append(tp)
+    else:
+        # if no data in last 24h, start at end
+        tps.append(TopicPartition(tp.topic, tp.partition, end_offsets[tp.partition]))
+
+consumer.assign(tps)
+
+print(f"Reading messages published in last 24 hours on topic '{topic}'...")
+
+# Track how many partitions are finished
+finished_partitions = set()
+
+try:
+    while True:
+        msg = consumer.poll(timeout=1.0)
+        if msg is None:
+            # stop if all partitions reached their end offsets
+            if len(finished_partitions) == len(partitions):
+                break
+            continue
+        if msg.error():
+            print("Consumer error: {}".format(msg.error()))
+            continue
+
+        # Print message
+        print(f"{msg.topic()}[{msg.partition()}]@{msg.offset()} "
+              f"ts={msg.timestamp()} key={msg.key()} value={msg.value().decode('utf-8')}")
+
+        # Stop consuming from a partition once we reach its "end offset"
+        if msg.offset() + 1 >= end_offsets[msg.partition()]:
+            finished_partitions.add(msg.partition())
+            if len(finished_partitions) == len(partitions):
+                break
+
+except KeyboardInterrupt:
+    print("Interrupted by user.")
+finally:
+    consumer.close()
+
+print("Done ✅ — consumed last 24h of data.")
